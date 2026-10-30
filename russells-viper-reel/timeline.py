@@ -8,13 +8,15 @@ what is on screen at that moment. Cuts are snapped to the natural pauses in the 
 DURATION = 52.29
 
 RKO_HIT = 41.90      # the moment you say "RKO". Change this one number if the hit is early or late.
-RKO_LEN = 1.6        # length of the RKO cartoon
+RKO_IMPACT = 1.15    # when the slam lands inside the RKO clip
+RKO_FREEZE = 0.45    # freeze-frame on the slam
+RKO_LEN = 2.0        # clip (1.56 s) + freeze
 
 # (start, end, kind, options). kind "me" = your original footage, "photo" = one of your photos
 # with keyframed camera moves. "focus" is the point (0-1 across, 0-1 down) the camera pushes towards.
 SEGMENTS = [
     (0.00, 2.00, "me", {"push": 0.08}),
-    (2.00, 4.00, "words", {}),                                  # Malai Paambu? -> python? -> NO
+    (2.00, 4.00, "words", {"img": "python1", "focus": (0.38, 0.74), "zoom": (1.0, 1.35)}),  # Malai Paambu? -> python? -> NO
     (4.00, 6.15, "photo", {"img": "viper2", "focus": (0.86, 0.22), "zoom": (1.0, 1.9), "fx": "reveal"}),
     (6.15, 8.30, "me", {}),
     (8.30, 10.50, "photo", {"img": "viper6", "focus": (0.17, 0.36), "zoom": (1.25, 1.6), "fx": "title"}),

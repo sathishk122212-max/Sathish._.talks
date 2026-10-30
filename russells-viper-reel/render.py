@@ -76,6 +76,21 @@ def prep_photo(img):
     return img, bg
 
 
+def load_gif(path):
+    if not os.path.exists(path):
+        return None
+    im = Image.open(path)
+    frames = []
+    try:
+        while True:
+            frames.append(im.convert("RGB").filter(ImageFilter.UnsharpMask(1.2, 60, 2)))
+            im.seek(im.tell() + 1)
+    except EOFError:
+        pass
+    _, bg = prep_photo(frames[0])
+    return frames, bg
+
+
 _feather = {}
 
 
@@ -191,6 +206,7 @@ class Edit:
             self.photos[os.path.splitext(os.path.basename(f))[0]] = prep_photo(Image.open(f).convert("RGB"))
         self._prep_map()
         self.cartoon = draw_snake("viper", 760, 460)
+        self.rko_frames = load_gif(os.path.join(PHOTOS, "rko.gif"))
         self.captions = load_captions()
 
     # ---- your footage
@@ -313,23 +329,30 @@ class Edit:
         return c
 
     def words(self, t, seg):
-        """Kinetic type for the python mix-up: MALAI PAAMBU? / PYTHON? -> crossed out."""
-        s0, s1, _, _ = seg
+        """MALAI PAAMBU? / PYTHON? over the python photo, then crossed out before the viper reveal."""
+        s0, s1, _, opt = seg
         lt = t - s0
-        c = self.bg.copy()
+        if "img" in opt:
+            c, _ = self.place_photo(opt["img"], lt, s1 - s0, opt)
+            c.alpha_composite(self.vignette)
+            y1, y2, yx = 270, 440, 610
+        else:
+            c = self.bg.copy()
+            y1, y2, yx = 820, 1030, 1250
         w1 = text_img("MALAI PAAMBU?", 150, WHITE, 0, path=FONT_TITLE)
         w2 = text_img("PYTHON?", 190, YELLOW, 0, path=FONT_TITLE)
         drift = 1 + 0.03 * lt
-        paste(c, w1, 540, 820, back_out(lt / 0.3, 2.0) * drift)
+        paste(c, w1, 540, y1, back_out(lt / 0.3, 2.0) * drift)
         if lt > 0.7:
-            paste(c, w2, 540, 1030, back_out((lt - 0.7) / 0.3, 2.4) * drift)
+            paste(c, w2, 540, y2, back_out((lt - 0.7) / 0.3, 2.4) * drift)
         if lt > 1.35:
             q = ease_out((lt - 1.35) / 0.2)
+            # the photo drains to a dark red as the answer turns into "no"
+            c.alpha_composite(Image.new("RGBA", (W, H), (60, 0, 5, int(110 * q))))
             d = ImageDraw.Draw(c)
-            for y, half in ((820, 430), (1030, 330)):
+            for y, half in ((y1, 430), (y2, 330)):
                 d.line((540 - half, y + 20, 540 - half + 2 * half * q, y - 20), fill=RED + (255,), width=22)
-            paste(c, text_img("❌", 150), 540, 1250, pop_scale(t, s0 + 1.45, 0.25))
-        c.alpha_composite(self.vignette)
+            paste(c, text_img("❌", 150), 540, yx, pop_scale(t, s0 + 1.45, 0.25))
         return c
 
     def viper_title(self, c, t, s0):
@@ -630,6 +653,45 @@ class Edit:
 
     # ---- RKO cartoon
     def rko(self, t, seg):
+        """Your RKO clip: plays at real speed, freezes on the slam with a flash, shake and punch-in."""
+        if not self.rko_frames:
+            return self.rko_cartoon(t, seg)
+        s0, s1, _, _ = seg
+        lt = t - s0
+        frames, bg = self.rko_frames
+        n = len(frames)
+        impact = RKO_IMPACT
+        hold = RKO_FREEZE
+        g = lt if lt < impact else (impact if lt < impact + hold else lt - hold)
+        fr = frames[min(n - 1, int(g / 0.06))]
+        # punch in on the slam, ease back out after the freeze
+        z = 1.3
+        if lt >= impact:
+            q = lt - impact
+            z += 0.35 * ease_out(q / 0.08) if q < hold else 0.35 * (1 - ease_in_out((q - hold) / 0.3))
+        w = int(W * z)
+        h = int(w * fr.height / fr.width)
+        c = bg.copy()
+        fg = fr.resize((w, h), Image.BICUBIC)
+        c.paste(fg, ((W - w) // 2, 960 - h // 2), feather_mask(fg.size))
+        c = c.convert("RGBA")
+        c.alpha_composite(self.vignette)
+        if lt >= impact:
+            q = lt - impact
+            fl = clamp(1 - q / 0.12)
+            if fl > 0:
+                c.alpha_composite(Image.new("RGBA", (W, H), (255, 255, 255, int(255 * fl))))
+            rko = text_img("RKO!", 300, YELLOW, 16, (170, 0, 10), path=FONT_TITLE)
+            paste(c, rko, 540, 360, 1 + 1.4 * clamp(1 - q / 0.12), 1.0, angle=-5)
+            if q > 0.12:
+                paste(c, text_img("OUT OF NOWHERE!", 110, WHITE, 12, path=FONT_TITLE), 540, 1560,
+                      back_out((q - 0.12) / 0.25), 1.0, angle=-3)
+            amp = 34 * clamp(1 - q / 0.55)
+            if amp > 0:
+                c = ImageChops.offset(c, int(amp * math.sin(lt * 97)), int(amp * math.cos(lt * 83)))
+        return c
+
+    def rko_cartoon(self, t, seg):
         s0, s1, _, _ = seg
         lt = t - s0
         hit = 0.45

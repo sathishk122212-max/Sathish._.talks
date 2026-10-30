@@ -257,8 +257,8 @@ def build(out_dir):
             place(sfx, sfx_warning(), s0 + 0.15, -26)
             place(sfx, sfx_pop(), s0 + 0.9, -20)
         elif kind == "rko":
-            place(sfx, sfx_boing(), s0, -18)
-            place(sfx, sfx_rko_hit(), s0 + 0.45 - 0.3, -13)
+            place(sfx, sfx_whoosh(0.5, 1.4), s0 + RKO_IMPACT - 0.45, -18)   # the jump
+            place(sfx, sfx_rko_hit(), s0 + RKO_IMPACT - 0.3, -13)         # the slam
         elif kind == "brand":
             place(sfx, sfx_riser(0.6), s0 - 0.5, -26)
             place(sfx, sfx_impact(), s0 + 0.05, -22)
@@ -271,7 +271,7 @@ def build(out_dir):
     music = music_bed(DURATION)
     # dip the music for the RKO so the slam lands, then bring it back
     t = np.arange(len(music)) / SR
-    dip = 1 - 0.8 * np.clip(1 - np.abs(t - (RKO_HIT + 0.6)) / 0.9, 0, 1)
+    dip = 1 - 0.8 * np.clip(1 - np.abs(t - (RKO_HIT + RKO_IMPACT)) / 1.0, 0, 1)
     write_wav(f"{out_dir}/music.wav", music * dip)
 
 
