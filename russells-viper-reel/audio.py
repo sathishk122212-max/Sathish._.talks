@@ -195,39 +195,83 @@ def write_wav(path, x):
         w.writeframes(data.tobytes())
 
 
+def sfx_hiss(dur=1.2):
+    t = t_axis(dur)
+    x = fft_band(rng.standard_normal(len(t)), 3000, 9000)
+    env = np.clip(t / 0.08, 0, 1) * np.clip((dur - t) / 0.5, 0, 1)
+    return norm(x * env)
+
+
+def sfx_boing():
+    t = t_axis(0.6)
+    f = 180 + 260 * np.exp(-t * 4) * (1 + 0.35 * np.sin(2 * np.pi * 14 * t))
+    return norm(np.sin(2 * np.pi * np.cumsum(f) / SR) * np.exp(-t * 4))
+
+
+def sfx_riser(dur=1.0):
+    t = t_axis(dur)
+    f = 300 + 1500 * (t / dur) ** 2
+    x = np.sin(2 * np.pi * np.cumsum(f) / SR) * 0.4 + lowpass(rng.standard_normal(len(t)), 400 + 6000 * (t / dur) ** 2)
+    return norm(x * (t / dur) ** 2)
+
+
 def build(out_dir):
     n = int(DURATION * SR) + SR
     sfx = np.zeros(n)
     # levels are relative to full scale; the voice peaks near 0 dBFS, so these stay under it
-    place(sfx, sfx_suspense(), 0.0, -20)
-    place(sfx, sfx_glitch(), 2.0, -26)            # "Malai Paambu ah? ❌"
-    for s in SECTION_STARTS:
-        place(sfx, sfx_whoosh(0.5), s - 0.25, -22)
-        place(sfx, sfx_glitch(), s - 0.03, -30)
-    place(sfx, sfx_ding(), S2_NAME + 0.6, -18)
-    place(sfx, sfx_impact(), S3_STATS + 0.05, -20)
-    place(sfx, sfx_heartbeat(), S3_COUNTER, -16)
-    for k in range(12):
-        place(sfx, sfx_tick(), S3_COUNTER + 0.1 + k * 0.1, -32)
-    place(sfx, sfx_impact(), S3_COUNTER + 1.3, -22)
-    place(sfx, sfx_whoosh(0.9, 1.2), S4_CHART + 0.2, -20)  # data-reveal whoosh
-    place(sfx, sfx_pop(), S4_CHART + 2.0, -22)
-    place(sfx, sfx_warning(), S5_COMPARE + 1.2, -24)
-    place(sfx, sfx_pop(), S5_COMPARE + 0.3, -24)
-    place(sfx, sfx_whoosh(0.35, 1.5), S6_DISTANCE + 0.3, -20)
-    place(sfx, sfx_whoosh(0.3, 1.8), S6_SPEED, -18)        # fast whoosh
-    place(sfx, sfx_impact(), S6_SPEED + 0.25, -26)
-    place(sfx, sfx_rko_hit(), RKO_HIT - 0.3, -14)
-    place(sfx, sfx_whoosh(0.4), RKO_HIT + RKO_FREEZE, -22)  # zoom-out
-    place(sfx, sfx_pop(), S8_END + 0.3, -18)
-    place(sfx, sfx_pop(), S8_END + 1.6, -18)
-    place(sfx, sfx_ding(), S8_END + 3.0, -22)              # follow tap
+    place(sfx, sfx_suspense(), 0.0, -22)
+    for c in CUTS:                                    # every cut gets a soft whoosh
+        place(sfx, sfx_whoosh(0.5), c - 0.25, -24)
+    for s0, s1, kind, opt in SEGMENTS:
+        fx = opt.get("fx")
+        if kind == "words":
+            place(sfx, sfx_impact(), s0 + 0.02, -24)
+            place(sfx, sfx_pop(), s0 + 0.72, -20)
+            place(sfx, sfx_glitch(), s0 + 1.35, -22)      # crossed out
+        elif fx == "reveal":
+            place(sfx, sfx_impact(), s0 + 0.02, -18)
+            place(sfx, sfx_hiss(1.4), s0 + 0.5, -24)
+        elif fx == "title":
+            place(sfx, sfx_ding(), s0 + 0.3, -20)
+        elif kind == "map":
+            place(sfx, sfx_impact(), s0 + 0.05, -22)
+            place(sfx, sfx_heartbeat(), MAP_COUNTER, -16)
+            for k in range(14):
+                place(sfx, sfx_tick(), MAP_COUNTER + 0.05 + k * 0.1, -32)
+            place(sfx, sfx_impact(), MAP_COUNTER + 1.45, -20)
+        elif kind == "chart":
+            place(sfx, sfx_whoosh(0.9, 1.2), s0 + 0.5, -20)   # data-reveal whoosh
+            place(sfx, sfx_pop(), s0 + 2.65, -20)
+            for k in range(3):
+                place(sfx, sfx_pop(), s0 + 4.9 + k * 0.25, -26)
+        elif fx == "identify":
+            for _, _, st in opt.get("notes", []):
+                place(sfx, sfx_pop(), s0 + st, -22)
+        elif fx == "strike":
+            place(sfx, sfx_hiss(1.0), s0 + 0.1, -26)
+            hit = s0 + (s1 - s0) * 0.34
+            place(sfx, sfx_whoosh(0.3, 1.8), hit - 0.2, -16)  # fast whoosh
+            place(sfx, sfx_impact(), hit, -18)
+            place(sfx, sfx_warning(), hit + 0.45, -26)
+        elif kind == "distance":
+            place(sfx, sfx_warning(), s0 + 0.15, -26)
+            place(sfx, sfx_pop(), s0 + 0.9, -20)
+        elif kind == "rko":
+            place(sfx, sfx_boing(), s0, -18)
+            place(sfx, sfx_rko_hit(), s0 + 0.45 - 0.3, -13)
+        elif kind == "brand":
+            place(sfx, sfx_riser(0.6), s0 - 0.5, -26)
+            place(sfx, sfx_impact(), s0 + 0.05, -22)
+        elif opt.get("end"):
+            place(sfx, sfx_pop(), s0 + 0.2, -18)
+            place(sfx, sfx_pop(), s0 + 1.4, -18)
+            place(sfx, sfx_ding(), s0 + 3.0, -22)          # follow tap
     write_wav(f"{out_dir}/sfx.wav", sfx)
 
     music = music_bed(DURATION)
-    # dip the music for the RKO freeze so the hit lands, then bring it back
+    # dip the music for the RKO so the slam lands, then bring it back
     t = np.arange(len(music)) / SR
-    dip = 1 - 0.8 * np.clip(1 - np.abs(t - (RKO_HIT + 0.4)) / 0.8, 0, 1)
+    dip = 1 - 0.8 * np.clip(1 - np.abs(t - (RKO_HIT + 0.6)) / 0.9, 0, 1)
     write_wav(f"{out_dir}/music.wav", music * dip)
 
 
